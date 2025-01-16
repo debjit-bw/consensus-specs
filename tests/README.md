@@ -4,7 +4,7 @@
 
 ### Creating the environment
 
-Use an OS that has Python 3.8 or above. For example, Debian 11 (bullseye)
+Use an OS that has Python 3.9 or above. For example, Debian 11 (bullseye)
 
 1. Install the packages you need:
    ```sh
