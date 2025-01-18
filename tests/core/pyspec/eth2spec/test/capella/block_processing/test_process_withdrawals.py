@@ -629,7 +629,8 @@ def test_success_one_fully_withdrawable_in_exit_queue(spec, state):
     state.validators[validator_index].exit_epoch = spec.get_current_epoch(state) + 1
     set_validator_fully_withdrawable(spec, state, validator_index)
 
-    # Sanity check that validator gets marked as inactive in this epoch itself, as opposed to the next epoch for partial withdrawal
+    # Sanity check that validator gets marked as inactive in this epoch itself, as opposed to the next epoch
+    # for partial withdrawal
     assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
 
     execution_payload = build_empty_execution_payload(spec, state)
