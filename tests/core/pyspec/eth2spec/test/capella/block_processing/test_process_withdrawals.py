@@ -655,7 +655,6 @@ def test_success_one_fully_withdrawable_exited(spec, state):
 @with_capella_and_later
 @spec_state_test
 def test_success_one_fully_withdrawable_slashed(spec, state):
-    # Todo: Should be an edge case when we mark a validator as fully withdrawable while it's active
     validator_index = min(len(state.validators) // 2, spec.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP - 1)
     state.validators[validator_index].slashed = True
     set_validator_fully_withdrawable(spec, state, validator_index)
@@ -675,8 +674,6 @@ def test_success_one_fully_withdrawable_exited_and_slashed(spec, state):
     state.validators[validator_index].slashed = True
     state.validators[validator_index].exit_epoch = spec.get_current_epoch(state)
     set_validator_fully_withdrawable(spec, state, validator_index)
-
-    next_epoch(spec, state)
 
     assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
 
