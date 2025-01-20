@@ -377,6 +377,19 @@ def test_invalid_incorrect_amount_full(spec, state):
 
 @with_capella_and_later
 @spec_state_test
+def test_invalid_incorrect_less_amount_full(spec, state):
+    prepare_expected_withdrawals(spec, state, rng=random.Random(42), num_full_withdrawals=1)
+
+    next_slot(spec, state)
+    execution_payload = build_empty_execution_payload(spec, state)
+    execution_payload.withdrawals[0].amount -= 1
+    execution_payload.block_hash = compute_el_block_hash(spec, execution_payload, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, valid=False)
+
+
+@with_capella_and_later
+@spec_state_test
 def test_invalid_incorrect_amount_partial(spec, state):
     prepare_expected_withdrawals(spec, state, rng=random.Random(42), num_full_withdrawals=1)
 
@@ -474,6 +487,21 @@ def test_invalid_many_incorrectly_partial(spec, state):
 
 @with_capella_and_later
 @spec_state_test
+def test_success_max_fully_withdrawable(spec, state):
+    # Sanity check that this test works for this state
+    assert len(state.validators) >= spec.MAX_WITHDRAWALS_PER_PAYLOAD
+
+    for i in range(spec.MAX_WITHDRAWALS_PER_PAYLOAD):
+        set_validator_fully_withdrawable(spec, state, i)
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(
+        spec, state, execution_payload, num_expected_withdrawals=spec.MAX_WITHDRAWALS_PER_PAYLOAD)
+
+
+@with_capella_and_later
+@spec_state_test
 def test_withdrawable_epoch_but_0_balance(spec, state):
     current_epoch = spec.get_current_epoch(state)
     set_validator_fully_withdrawable(spec, state, 0, current_epoch)
@@ -530,6 +558,22 @@ def test_no_withdrawals_but_some_next_epoch(spec, state):
 
 @with_capella_and_later
 @spec_state_test
+def test_success_full_withdrawal_at_max_effective_balance(spec, state):
+    current_epoch = spec.get_current_epoch(state)
+
+    set_validator_fully_withdrawable(spec, state, 0, current_epoch)
+    set_eth1_withdrawal_credential_with_balance(spec, state, 0, spec.MAX_EFFECTIVE_BALANCE)
+
+    validator = state.validators[0]
+    assert spec.is_fully_withdrawable_validator(validator, state.balances[0], current_epoch)
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
+
+
+@with_capella_and_later
+@spec_state_test
 def test_all_withdrawal(spec, state):
     # Make all validators withdrawable
     for index in range(len(state.validators)):
@@ -562,6 +606,80 @@ def run_random_full_withdrawals_test(spec, state, rng):
     execution_payload = build_empty_execution_payload(spec, state)
 
     yield from run_withdrawals_processing(spec, state, execution_payload)
+
+
+@with_capella_and_later
+@spec_state_test
+def test_success_one_fully_withdrawable_not_yet_active(spec, state):
+    validator_index = min(len(state.validators) // 2, spec.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP - 1)
+    state.validators[validator_index].activation_epoch += 4
+    set_validator_fully_withdrawable(spec, state, validator_index)
+
+    assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
+
+
+@with_capella_and_later
+@spec_state_test
+def test_success_one_fully_withdrawable_in_exit_queue(spec, state):
+    validator_index = min(len(state.validators) // 2, spec.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP - 1)
+    state.validators[validator_index].exit_epoch = spec.get_current_epoch(state) + 1
+    set_validator_fully_withdrawable(spec, state, validator_index)
+
+    # Sanity check that validator gets marked as inactive in this epoch itself, as opposed to the next epoch
+    # for partial withdrawal
+    assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
+
+
+@with_capella_and_later
+@spec_state_test
+def test_success_one_fully_withdrawable_exited(spec, state):
+    validator_index = min(len(state.validators) // 2, spec.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP - 1)
+    state.validators[validator_index].exit_epoch = spec.get_current_epoch(state)
+    set_validator_fully_withdrawable(spec, state, validator_index)
+
+    assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
+
+
+@with_capella_and_later
+@spec_state_test
+def test_success_one_fully_withdrawable_slashed(spec, state):
+    validator_index = min(len(state.validators) // 2, spec.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP - 1)
+    state.validators[validator_index].slashed = True
+    set_validator_fully_withdrawable(spec, state, validator_index)
+
+    # Sanity check that validator gets marked as inactive, as opposed to a partial withdrawal
+    assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
+
+
+@with_capella_and_later
+@spec_state_test
+def test_success_one_fully_withdrawable_exited_and_slashed(spec, state):
+    validator_index = min(len(state.validators) // 2, spec.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP - 1)
+    state.validators[validator_index].slashed = True
+    state.validators[validator_index].exit_epoch = spec.get_current_epoch(state)
+    set_validator_fully_withdrawable(spec, state, validator_index)
+
+    assert not spec.is_active_validator(state.validators[validator_index], spec.get_current_epoch(state))
+
+    execution_payload = build_empty_execution_payload(spec, state)
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
 
 
 @with_capella_and_later
@@ -622,6 +740,19 @@ def test_success_no_excess_balance(spec, state):
     execution_payload = build_empty_execution_payload(spec, state)
 
     yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=0)
+
+
+@with_capella_and_later
+@spec_state_test
+def test_correct_setting_of_withdrawal_amount(spec, state):
+    excess_balance = random.randint(1, spec.MAX_EFFECTIVE_BALANCE)
+
+    set_validator_partially_withdrawable(spec, state, 0, excess_balance)
+
+    execution_payload = build_empty_execution_payload(spec, state)
+    assert execution_payload.withdrawals[0].amount == excess_balance
+
+    yield from run_withdrawals_processing(spec, state, execution_payload, num_expected_withdrawals=1)
 
 
 @with_capella_and_later
